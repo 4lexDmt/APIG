@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -182,15 +184,13 @@ func writeAuthError(w http.ResponseWriter, message, code string, statusCode int)
 	})
 }
 
-// generateID creates a random hex string suitable for use as a request/trace ID.
+// generateID creates a cryptographically random 16-byte hex string (32 chars)
+// suitable for use as a request or trace ID.
 func generateID() string {
-	// Use time-based + pseudo-random for a simple unique ID without importing uuid package
-	now := time.Now().UnixNano()
-	return strings.ToLower(strings.NewReplacer("-", "", "_", "").Replace(
-		// Format: hex of timestamp + 8 random-ish chars
-		strings.TrimRight(
-			strings.Replace(time.Unix(0, now).UTC().Format("20060102150405.000000000"), ".", "", 1),
-			"0",
-		),
-	))
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// Extremely unlikely — fall back to timestamp-based ID
+		return strings.ReplaceAll(time.Now().UTC().Format("20060102150405.000000000"), ".", "")
+	}
+	return hex.EncodeToString(b)
 }
