@@ -2,15 +2,20 @@ package db
 
 import (
 	"context"
+	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
+	"io/fs"
 	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// migrations holds the embedded SQL migration files.
+// This ensures they are included in the compiled binary and available in Docker.
+//
+//go:embed migrations/*.sql
+var migrations embed.FS
 
 // NewPool creates a new pgx connection pool with reasonable settings.
 func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
@@ -35,59 +40,90 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// RunMigrations reads and executes all SQL files from internal/db/migrations/ in lexicographic order.
+// RunMigrations executes all embedded SQL migration files in lexicographic order.
+// Uses a migration tracking table to skip already-applied migrations (idempotent).
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	// Resolve migrations directory relative to this file's location
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return fmt.Errorf("could not determine caller file path")
+	// Ensure the migrations tracking table exists
+	if err := ensureMigrationsTable(ctx, pool); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	migrationsDir := filepath.Join(filepath.Dir(filename), "migrations")
-
-	entries, err := os.ReadDir(migrationsDir)
+	// Read all embedded SQL files
+	entries, err := fs.ReadDir(migrations, "migrations")
 	if err != nil {
-		return fmt.Errorf("failed to read migrations directory %s: %w", migrationsDir, err)
+		return fmt.Errorf("failed to read embedded migrations: %w", err)
 	}
 
-	// Collect and sort SQL files
+	// Collect SQL filenames in sorted order
 	var sqlFiles []string
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
-			sqlFiles = append(sqlFiles, filepath.Join(migrationsDir, entry.Name()))
+			sqlFiles = append(sqlFiles, entry.Name())
 		}
 	}
 	sort.Strings(sqlFiles)
 
-	if len(sqlFiles) == 0 {
-		return nil
-	}
+	for _, name := range sqlFiles {
+		applied, err := isMigrationApplied(ctx, pool, name)
+		if err != nil {
+			return fmt.Errorf("failed to check migration status for %s: %w", name, err)
+		}
+		if applied {
+			continue
+		}
 
-	// Execute each migration in a transaction
-	for _, sqlFile := range sqlFiles {
-		if err := runMigrationFile(ctx, pool, sqlFile); err != nil {
-			return fmt.Errorf("migration %s failed: %w", filepath.Base(sqlFile), err)
+		content, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			return fmt.Errorf("failed to read migration %s: %w", name, err)
+		}
+
+		if err := applyMigration(ctx, pool, name, string(content)); err != nil {
+			return fmt.Errorf("failed to apply migration %s: %w", name, err)
 		}
 	}
 
 	return nil
 }
 
-// runMigrationFile executes a single SQL migration file within a transaction.
-func runMigrationFile(ctx context.Context, pool *pgxpool.Pool, filePath string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read migration file: %w", err)
-	}
+// ensureMigrationsTable creates the schema_migrations tracking table if it doesn't exist.
+func ensureMigrationsTable(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version     TEXT PRIMARY KEY,
+			applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`)
+	return err
+}
 
+// isMigrationApplied checks whether a migration file has already been applied.
+func isMigrationApplied(ctx context.Context, pool *pgxpool.Pool, version string) (bool, error) {
+	var count int
+	err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM schema_migrations WHERE version = $1`, version,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// applyMigration executes a single migration file in a transaction and records it.
+func applyMigration(ctx context.Context, pool *pgxpool.Pool, version, sql string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if _, err := tx.Exec(ctx, string(content)); err != nil {
-		return fmt.Errorf("failed to execute migration: %w", err)
+	if _, err := tx.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("failed to execute SQL: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO schema_migrations (version) VALUES ($1)`, version,
+	); err != nil {
+		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
 	return tx.Commit(ctx)
