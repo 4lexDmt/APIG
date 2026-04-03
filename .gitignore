@@ -1,0 +1,25 @@
+# ── Secrets & local config ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Go build artifacts ────────────────────────────────────────────────────────
+routeiq-gateway/routeiq-gateway
+routeiq-gateway/*.out
+routeiq-gateway/coverage.out
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
