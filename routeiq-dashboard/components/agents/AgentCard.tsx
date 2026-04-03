@@ -8,16 +8,13 @@ interface AgentCardProps {
   agent: Agent
 }
 
-const TIER_COLORS: Record<string, string> = {
-  economy: 'text-routeiq-green bg-routeiq-green/20',
-  standard: 'text-routeiq-blue bg-routeiq-blue/20',
-  premium: 'text-purple-400 bg-purple-500/20',
-}
-
 export function AgentCard({ agent }: AgentCardProps) {
-  const budgetPercent = agent.spend_today_usd !== undefined && agent.daily_budget_usd > 0
-    ? Math.min((agent.spend_today_usd / agent.daily_budget_usd) * 100, 100)
-    : 0
+  const budgetPercent =
+    agent.today_spend_usd !== undefined &&
+    agent.daily_budget_usd != null &&
+    agent.daily_budget_usd > 0
+      ? Math.min((agent.today_spend_usd / agent.daily_budget_usd) * 100, 100)
+      : 0
 
   return (
     <div className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col gap-4 hover:border-white/20 transition-colors group">
@@ -46,24 +43,26 @@ export function AgentCard({ agent }: AgentCardProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-slate-400">Daily Budget</span>
-          <span className="text-white font-medium">{formatCurrency(agent.daily_budget_usd)}</span>
+          <span className="text-white font-medium">{formatCurrency(agent.daily_budget_usd ?? 0)}</span>
         </div>
         <BudgetProgressBar percent={budgetPercent} />
         <div className="flex justify-between text-xs text-slate-500">
           <span>{Math.round(budgetPercent)}% used today</span>
-          <span>{formatCurrency(agent.spend_today_usd ?? 0)} spent</span>
+          <span>{formatCurrency(agent.today_spend_usd ?? 0)} spent</span>
         </div>
       </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-slate-800/50 rounded-lg p-2.5 text-center">
-          <p className="text-white font-semibold text-sm">{(agent.requests_today ?? 0).toLocaleString()}</p>
+          <p className="text-white font-semibold text-sm">
+            {(agent.today_request_count ?? 0).toLocaleString()}
+          </p>
           <p className="text-slate-500 text-xs">Requests today</p>
         </div>
         <div className="bg-slate-800/50 rounded-lg p-2.5 text-center">
-          <span className={`px-1.5 py-0.5 rounded text-xs ${TIER_COLORS[agent.quality_tier]}`}>
-            {agent.quality_tier}
+          <span className="px-1.5 py-0.5 rounded text-xs text-routeiq-blue bg-routeiq-blue/20">
+            standard
           </span>
           <p className="text-slate-500 text-xs mt-0.5">Quality tier</p>
         </div>

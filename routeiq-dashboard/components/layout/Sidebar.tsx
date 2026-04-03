@@ -13,7 +13,6 @@ import {
   Users,
   ChevronRight,
 } from 'lucide-react'
-import { UserButton } from '@clerk/nextjs'
 import { cn } from '@/lib/utils/cn'
 
 interface NavItem {
@@ -127,13 +126,9 @@ export function Sidebar() {
       {/* User info */}
       <div className="p-4 border-t border-white/10 shrink-0">
         <div className="flex items-center gap-3">
-          <UserButton
-            appearance={{
-              elements: {
-                avatarBox: 'w-8 h-8',
-              },
-            }}
-          />
+          <div className="w-8 h-8 rounded-full bg-routeiq-blue/30 flex items-center justify-center shrink-0">
+            <span className="text-routeiq-blue text-xs font-bold">U</span>
+          </div>
           <div className="min-w-0">
             <p className="text-white text-xs font-medium truncate">My Organization</p>
             <p className="text-slate-500 text-xs">Free plan</p>

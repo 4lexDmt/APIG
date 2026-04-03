@@ -14,6 +14,8 @@ node_modules/
 out/
 dist/
 npm-debug.log*
+package-lock.json
+next-env.d.ts
 
 # ── OS files ──────────────────────────────────────────────────────────────────
 .DS_Store

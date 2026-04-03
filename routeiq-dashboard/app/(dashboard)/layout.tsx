@@ -1,19 +1,12 @@
-import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
+// TODO(production): restore Clerk auth check before deploying.
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { userId } = auth()
-
-  if (!userId) {
-    redirect('/sign-in')
-  }
-
   return (
     <div className="flex h-screen bg-[#0f172a] overflow-hidden">
       <Sidebar />
